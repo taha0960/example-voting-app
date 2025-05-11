@@ -47,21 +47,22 @@ jobs:
           docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/result-app:${{ github.sha }} .
           docker push ${{ secrets.DOCKER_HUB_USERNAME }}/result-app:${{ github.sha }}
 
-  deploy:
+  update-manifests:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout manifests repository
+        uses: actions/checkout@v4
+        with:
+          repository: taha0960/voting-app-manifests
+          token: ${{ secrets.GH_TOKEN }}
       
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v3
-      
-      - name: Deploy to Kubernetes
+      - name: Update image tags
         run: |
-          # Update image tags in deployment files
-          sed -i "s|image:.*|image: ${{ secrets.DOCKER_HUB_USERNAME }}/vote-app:${{ github.sha }}|" k8s/vote/deployment.yaml
-          sed -i "s|image:.*|image: ${{ secrets.DOCKER_HUB_USERNAME }}/result-app:${{ github.sha }}|" k8s/result/deployment.yaml
-          
-          kubectl apply -f k8s/ -n voting-app
-        env:
-          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+          sed -i "s|image:.*|image: ${{ secrets.DOCKER_HUB_USERNAME }}/vote-app:${{ github.sha }}|" vote/deployment.yaml
+          sed -i "s|image:.*|image: ${{ secrets.DOCKER_HUB_USERNAME }}/result-app:${{ github.sha }}|" result/deployment.yaml
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git add vote/deployment.yaml result/deployment.yaml
+          git commit -m "Update image tags to ${{ github.sha }}"
+          git push
