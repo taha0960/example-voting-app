@@ -1,0 +1,67 @@
+name: Deploy Voting App
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Test Python App
+        run: |
+          cd vote
+          pip install -r requirements.txt
+          python -m pytest
+
+      - name: Test Node.js App
+        run: |
+          cd result
+          npm install
+          npm test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and Push Vote Image
+        run: |
+          cd vote
+          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/vote-app:${{ github.sha }} .
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/vote-app:${{ github.sha }}
+
+      - name: Build and Push Result Image
+        run: |
+          cd result
+          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/result-app:${{ github.sha }} .
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/result-app:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+      
+      - name: Deploy to Kubernetes
+        run: |
+          # Update image tags in deployment files
+          sed -i "s|image:.*|image: ${{ secrets.DOCKER_HUB_USERNAME }}/vote-app:${{ github.sha }}|" k8s/vote/deployment.yaml
+          sed -i "s|image:.*|image: ${{ secrets.DOCKER_HUB_USERNAME }}/result-app:${{ github.sha }}|" k8s/result/deployment.yaml
+          
+          kubectl apply -f k8s/ -n voting-app
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
