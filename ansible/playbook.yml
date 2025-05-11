@@ -1,0 +1,9 @@
+- name: Install curl on my computer
+  hosts: localhost
+  become: yes
+  tasks:
+    - name: Get the curl
+      apt:
+         name: curl
+         state: present
+         update_cache: yes
